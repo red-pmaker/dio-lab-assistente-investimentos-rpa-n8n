@@ -117,6 +117,12 @@ python src/extrair_clientes.py
 > 
 > *Convidamos você a explorar essas opções no aplicativo do Banco Digital!"*
 
+## 📸 Demonstração da Execução
+
+Registro da execução bem-sucedida de ponta a ponta no N8N Cloud, demonstrando o fluxo completo com os nós de Webhook, requisição do catálogo CSV, cruzamento de dados, geração via Gemini e formatação final:
+
+![Execução do Workflow no N8N](docs/assets/workflow-execucao.png)
+
 ---
 
 ## 🏆 Entregáveis Atendidos
@@ -125,4 +131,6 @@ python src/extrair_clientes.py
 - [x] **Workflow N8N**: Fluxo completo com Webhook, requisição HTTP do CSV, regras de negócios e tratamento de dados.
 - [x] **MVP**: Geração de templates padronizados por perfil (`mensagem_estatica_mvp`).
 - [x] **Desafio com IA Generativa**: Integração com Google Gemini gerando recomendações inteligentes, empáticas e personalizadas com base no saldo real e produtos elegíveis.
-- [x] **Exportação**: Arquivo `n8n/workflow.json` validado e testado ponta a ponta.
+- [x] **Exportação**: Arquivo `n8n/workflow.json` validado e testado.
+- [x] **Demonstração**: Print comprovando a execução bem-sucedida de ponta a ponta.
+
