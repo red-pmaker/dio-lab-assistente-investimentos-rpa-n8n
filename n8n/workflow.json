@@ -1,0 +1,141 @@
+{
+  "name": "Initial version",
+  "nodes": [
+    {
+      "id": "8b89342f-e964-49b1-a79d-65b2e7f14204",
+      "name": "Webhook Clientes",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "clientes",
+        "responseMode": "lastNode"
+      },
+      "webhookId": "79219ab2-c6c5-4deb-9406-ff00a82165ed"
+    },
+    {
+      "id": "b1c18a74-5575-471a-bf6b-8a6d93c97e9f",
+      "name": "Obter Investimentos CSV",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        224,
+        0
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://digitalinnovationone.github.io/dio-lab-assistente-investimentos-rpa-n8n/data.csv"
+      }
+    },
+    {
+      "id": "dbf73243-e1ab-4888-b7dc-067bd6454af9",
+      "name": "Cruzar Clientes e Investimentos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst webhookData = $('Webhook Clientes').first().json;\nconst clientes = webhookData.body?.clientes || webhookData.body || [];\nconst csvText = $input.first().json.data || '';\n\nconst lines = csvText.trim().split('\\n');\nconst headers = lines[0].split(',').map(h => h.trim());\n\nconst produtos = [];\nfor (let i = 1; i < lines.length; i++) {\n  const line = lines[i].trim();\n  if (!line) continue;\n  const values = line.split(',').map(v => v.trim());\n  const prod = {};\n  headers.forEach((h, idx) => {\n    prod[h] = values[idx];\n  });\n  produtos.push(prod);\n}\n\nconst results = [];\nfor (const cliente of clientes) {\n  const opcoesRecomendadas = produtos.filter(\n    p => p.perfil.toLowerCase() === (cliente.perfil || '').toLowerCase()\n  );\n\n  const resumoOpcoes = opcoesRecomendadas.map(\n    p => `- ${p.produto} (Aplicação mínima: R$ ${p.minimo}, Rentabilidade: ${p.rentabilidade})`\n  ).join('\\n');\n\n  const mensagemEstatica = `Olá ${cliente.nome}!\\nIdentificamos que seu perfil de investidor é ${cliente.perfil} e seu saldo atual é de ${cliente.saldo}.\\n\\nCom base no seu perfil, recomendamos as seguintes opções de investimento:\\n${resumoOpcoes}\\n\\nBons investimentos!`;\n\n  const promptIA = `Você é um consultor financeiro e assistente de investimentos especializado do banco digital.\\nCrie uma mensagem amigável, acolhedora, profissional e personalizada para o cliente abaixo:\\n\\n- Nome: ${cliente.nome}\\n- Email: ${cliente.email}\\n- Saldo Disponível: ${cliente.saldo}\\n- Perfil de Investidor: ${cliente.perfil}\\n\\nOpções de investimento disponíveis no catálogo para este perfil:\\n${resumoOpcoes}\\n\\nDiretrizes da mensagem:\\n1. Cumprimente o cliente pelo primeiro nome.\\n2. Reconheça o perfil (${cliente.perfil}) e o saldo disponível (${cliente.saldo}).\\n3. Destaque quais das opções acima são mais recomendadas considerando o valor mínimo de aplicação em relação ao saldo dele.\\n4. Explique brevemente o benefício principal da recomendação de forma clara, sem jargões excessivos.\\n5. Finalize com uma chamada para ação convidando o cliente a entrar em contato ou confirmar a aplicação no aplicativo.\\n6. Mantenha o tom profissional, humanizado e direto (máximo de 3 a 4 parágrafos curtos).`;\n\n  results.push({\n    json: {\n      cliente: cliente.nome,\n      email: cliente.email,\n      saldo: cliente.saldo,\n      perfil: cliente.perfil,\n      opcoesRecomendadas,\n      mensagemEstatica,\n      promptIA\n    }\n  });\n}\n\nreturn results;\n"
+      }
+    },
+    {
+      "id": "88ecd2d0-1418-4353-b01d-4c3be74c5095",
+      "name": "Gerar Recomendacao com IA",
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        672,
+        0
+      ],
+      "parameters": {
+        "resource": "text",
+        "operation": "message",
+        "modelId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "models/gemini-2.5-flash"
+        },
+        "messages": {
+          "values": [
+            {
+              "role": "user",
+              "content": "={{ $json.promptIA }}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "40b43e2a-f169-43da-85ed-7a219a4920f2",
+      "name": "Formatar Resposta Final",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst clientesData = $('Cruzar Clientes e Investimentos').all();\nconst geminiData = $input.all();\n\nconst relatorio = clientesData.map((c, i) => {\n  const aiText = geminiData[i]?.json?.content?.parts?.[0]?.text || '';\n  return {\n    cliente: c.json.cliente,\n    email: c.json.email,\n    perfil: c.json.perfil,\n    saldo: c.json.saldo,\n    recomendacao_ia: aiText,\n    mensagem_estatica_mvp: c.json.mensagemEstatica,\n    opcoes_produtos: c.json.opcoesRecomendadas\n  };\n});\n\nreturn [{\n  json: {\n    status: 'sucesso',\n    total_processados: relatorio.length,\n    timestamp: new Date().toISOString(),\n    clientes: relatorio\n  }\n}];\n"
+      }
+    }
+  ],
+  "connections": {
+    "Webhook Clientes": {
+      "main": [
+        [
+          {
+            "node": "Obter Investimentos CSV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Obter Investimentos CSV": {
+      "main": [
+        [
+          {
+            "node": "Cruzar Clientes e Investimentos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cruzar Clientes e Investimentos": {
+      "main": [
+        [
+          {
+            "node": "Gerar Recomendacao com IA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gerar Recomendacao com IA": {
+      "main": [
+        [
+          {
+            "node": "Formatar Resposta Final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
